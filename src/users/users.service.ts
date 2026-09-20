@@ -57,10 +57,19 @@ export class UsersService implements OnModuleInit {
   }
 
   private async ensureAdminUser(email: string, password: string, name: string): Promise<void> {
-    const rs = await this.db.execute(`SELECT id FROM admin_users WHERE email = ?`, [email])
-    if (rs.rows.length > 0) return
-
     const hash = await bcrypt.hash(password, 10)
+    const rs = await this.db.execute(`SELECT id FROM admin_users WHERE email = ?`, [email])
+
+    if (rs.rows.length > 0) {
+      await this.db.execute(`UPDATE admin_users SET name = ?, password_hash = ? WHERE email = ?`, [
+        name,
+        hash,
+        email,
+      ])
+      this.log.log(`Dashboard admin user synced: ${email}`)
+      return
+    }
+
     await this.db.execute(
       `INSERT INTO admin_users (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime('now'))`,
       [name, email, hash],

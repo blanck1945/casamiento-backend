@@ -3,10 +3,10 @@ import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger'
 import { UsersService } from './users.service'
 
 class LoginDto {
-  @ApiProperty({ example: 'demo@example.com' })
+  @ApiProperty({ example: 'panel@casamiento.local' })
   email!: string
 
-  @ApiProperty({ example: 'demo123' })
+  @ApiProperty({ example: '********' })
   password!: string
 }
 

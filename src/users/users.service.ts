@@ -45,10 +45,18 @@ export class UsersService implements OnModuleInit {
   }
 
   private async seedDemoUser(): Promise<void> {
-    const email = (this.config.get<string>('DEMO_DASHBOARD_EMAIL') || 'demo@example.com').trim().toLowerCase()
-    const password = this.config.get<string>('DEMO_DASHBOARD_PASSWORD') || 'demo123'
-    const name = this.config.get<string>('DEMO_DASHBOARD_NAME') || 'Demo Admin'
+    const password = this.config.get<string>('DEMO_DASHBOARD_PASSWORD') || 'VanesaAugusto-Panel26'
+    const name = this.config.get<string>('DEMO_DASHBOARD_NAME') || 'Administrador'
+    const customEmail = this.config.get<string>('DEMO_DASHBOARD_EMAIL')?.trim().toLowerCase()
 
+    await this.ensureAdminUser('panel@casamiento.local', password, name)
+
+    if (customEmail && customEmail !== 'panel@casamiento.local') {
+      await this.ensureAdminUser(customEmail, password, name)
+    }
+  }
+
+  private async ensureAdminUser(email: string, password: string, name: string): Promise<void> {
     const rs = await this.db.execute(`SELECT id FROM admin_users WHERE email = ?`, [email])
     if (rs.rows.length > 0) return
 
@@ -57,7 +65,7 @@ export class UsersService implements OnModuleInit {
       `INSERT INTO admin_users (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime('now'))`,
       [name, email, hash],
     )
-    this.log.log(`Demo admin user created: ${email}`)
+    this.log.log(`Dashboard admin user seeded: ${email}`)
   }
 
   async login(email: string, password: string): Promise<AdminUser> {

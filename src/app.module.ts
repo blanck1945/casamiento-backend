@@ -7,10 +7,21 @@ import { AlbumPhotosModule } from './album-photos/album-photos.module'
 import { PreviewCommentsModule } from './preview-comments/preview-comments.module'
 import { UsersModule } from './users/users.module'
 
-@Controller('health')
-class HealthController {
+@Controller()
+class RootController {
   @Get()
-  check() {
+  root() {
+    return {
+      ok: true,
+      service: 'casamiento-backend',
+      docs: '/docs',
+      health: '/health',
+      api: '/api',
+    }
+  }
+
+  @Get('health')
+  health() {
     return { ok: true, service: 'casamiento-backend' }
   }
 }
@@ -24,6 +35,6 @@ class HealthController {
     PreviewCommentsModule,
     UsersModule,
   ],
-  controllers: [HealthController],
+  controllers: [RootController],
 })
 export class AppModule {}

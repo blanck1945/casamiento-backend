@@ -49,6 +49,22 @@ export type BulkImportResult = {
   summary: { ok: number; failed: number }
 }
 
+export type BulkImportPreviewRow = BulkImportRow & {
+  row: number
+}
+
+export type BulkImportExistingMatch = BulkImportPreviewRow & {
+  existingId: number
+  existingName: string
+}
+
+export type BulkImportPreviewResult = {
+  nuevos: BulkImportPreviewRow[]
+  existentes: BulkImportExistingMatch[]
+  errores: BulkImportError[]
+  resumen: { nuevos: number; existentes: number; invalidos: number }
+}
+
 type Row = {
   id: number
   name: string
@@ -120,6 +136,10 @@ function pickField(record: Record<string, string>, ...keys: string[]): string {
     if (found) return found[1]?.trim() ?? ''
   }
   return ''
+}
+
+function normalizeGuestName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
 @Injectable()
@@ -209,7 +229,7 @@ export class InvitationsService implements OnModuleInit {
     }
   }
 
-  async importFromCsv(buffer: Buffer): Promise<BulkImportResult> {
+  parseCsvBuffer(buffer: Buffer): { validRows: BulkImportPreviewRow[]; errors: BulkImportError[] } {
     let text = buffer.toString('utf8')
     if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
 
@@ -229,7 +249,7 @@ export class InvitationsService implements OnModuleInit {
       throw new BadRequestException('CSV has no data rows')
     }
 
-    const validRows: BulkImportRow[] = []
+    const validRows: BulkImportPreviewRow[] = []
     const errors: BulkImportError[] = []
 
     for (let i = 0; i < records.length; i++) {
@@ -267,15 +287,56 @@ export class InvitationsService implements OnModuleInit {
         }
       }
 
-      validRows.push({ name, email, guestSide, allowsPlusOne })
+      validRows.push({ row: rowNum, name, email, guestSide, allowsPlusOne })
     }
 
-    const result = await this.bulkCreate(validRows)
-    return {
-      created: result.created,
-      errors: [...errors, ...result.errors],
-      summary: { ok: result.created.length, failed: errors.length + result.errors.length },
+    return { validRows, errors }
+  }
+
+  async previewCsvImport(buffer: Buffer): Promise<BulkImportPreviewResult> {
+    const { validRows, errors } = this.parseCsvBuffer(buffer)
+    const existing = await this.list()
+    const byName = new Map<string, Invitation>()
+    for (const inv of existing) {
+      byName.set(normalizeGuestName(inv.name), inv)
     }
+
+    const nuevos: BulkImportPreviewRow[] = []
+    const existentes: BulkImportExistingMatch[] = []
+
+    for (const row of validRows) {
+      const match = byName.get(normalizeGuestName(row.name))
+      if (match) {
+        existentes.push({
+          ...row,
+          existingId: match.id,
+          existingName: match.name,
+        })
+      } else {
+        nuevos.push(row)
+      }
+    }
+
+    return {
+      nuevos,
+      existentes,
+      errores: errors,
+      resumen: {
+        nuevos: nuevos.length,
+        existentes: existentes.length,
+        invalidos: errors.length,
+      },
+    }
+  }
+
+  async importFromCsv(buffer: Buffer): Promise<BulkImportResult> {
+    const preview = await this.previewCsvImport(buffer)
+    return this.bulkCreateRows(preview.nuevos)
+  }
+
+  async bulkCreateRows(rows: BulkImportRow[]): Promise<BulkImportResult> {
+    const result = await this.bulkCreate(rows)
+    return result
   }
 
   async getById(id: number): Promise<Invitation> {

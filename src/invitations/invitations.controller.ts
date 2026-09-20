@@ -55,6 +55,25 @@ class UpdateInvitationDto {
   email?: string | null
 }
 
+class BulkImportRowDto {
+  @ApiProperty({ example: 'María López' })
+  name!: string
+
+  @ApiPropertyOptional({ example: 'maria@example.com' })
+  email?: string | null
+
+  @ApiProperty({ example: 'vanesa', enum: ['vanesa', 'augusto'] })
+  guestSide!: GuestSide
+
+  @ApiProperty({ example: false })
+  allowsPlusOne!: boolean
+}
+
+class BulkImportConfirmDto {
+  @ApiProperty({ type: [BulkImportRowDto] })
+  rows!: BulkImportRowDto[]
+}
+
 class RsvpDto {
   @ApiProperty({ example: 'yes', enum: ['yes', 'no', 'unsure'] })
   status!: InvitationStatus
@@ -89,8 +108,42 @@ export class InvitationsController {
     return this.invitations.create(body.name, !!body.allowsPlusOne, body.guestSide, body.email)
   }
 
+  @Post('bulk/preview')
+  @ApiOperation({ summary: 'Preview CSV import — detect existing guests by name' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_CSV_BYTES },
+    }),
+  )
+  bulkPreview(@UploadedFile() file: Express.Multer.File) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('CSV file is required')
+    }
+    return this.invitations.previewCsvImport(file.buffer)
+  }
+
+  @Post('bulk/confirm')
+  @ApiOperation({ summary: 'Confirm bulk import for selected rows' })
+  bulkConfirm(@Body() body: BulkImportConfirmDto) {
+    if (!Array.isArray(body.rows) || body.rows.length === 0) {
+      throw new BadRequestException('rows array is required')
+    }
+    return this.invitations.bulkCreateRows(body.rows)
+  }
+
   @Post('bulk')
-  @ApiOperation({ summary: 'Bulk import invitations from CSV' })
+  @ApiOperation({ summary: 'Bulk import invitations from CSV (skips existing names)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {

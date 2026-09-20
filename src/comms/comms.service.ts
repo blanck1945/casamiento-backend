@@ -2,8 +2,8 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { buildInviteEmail } from './invite-email.template'
 
-const DEFAULT_FROM_ADDRESS =
-  'Casamiento Vanesa y Augusto <casamiento_de_vanesa_y_augusto@zyta.app>'
+/** Use a verified @zyta.app mailbox (Resend). Custom local-parts may not deliver. */
+const DEFAULT_FROM_ADDRESS = 'Casamiento Vanesa y Augusto <aspastrana@zyta.app>'
 const DEFAULT_PUBLIC_BASE_URL = 'https://casamiento-vanesa-augusto.vercel.app'
 
 export type SendInvitationEmailInput = {

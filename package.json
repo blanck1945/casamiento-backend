@@ -1,5 +1,5 @@
 {
-  "name": "backend-bridge",
+  "name": "casamiento-backend",
   "version": "0.1.0",
   "private": true,
   "description": "NestJS backend bridge — wedding invitations, RSVP, S3 album, Turso.",

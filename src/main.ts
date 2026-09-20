@@ -26,7 +26,7 @@ async function bootstrap() {
   const port = Number(config.get('PORT') || 3400)
   await app.listen(port)
   // eslint-disable-next-line no-console
-  console.log(`backend-bridge listening on :${port} · docs /docs · health /health`)
+  console.log(`casamiento-backend listening on :${port} · docs /docs · health /health`)
 }
 
 void bootstrap()

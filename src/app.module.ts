@@ -11,7 +11,7 @@ import { UsersModule } from './users/users.module'
 class HealthController {
   @Get()
   check() {
-    return { ok: true, service: 'backend-bridge' }
+    return { ok: true, service: 'casamiento-backend' }
   }
 }
 

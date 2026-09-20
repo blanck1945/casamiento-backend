@@ -4,16 +4,16 @@ import { FileInterceptor } from '@nestjs/platform-express'
 import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger'
 import type { Express } from 'express'
 import { memoryStorage } from 'multer'
-import { AlbumFotosService } from './album-fotos.service'
+import { AlbumPhotosService } from './album-photos.service'
 import { MAX_UPLOAD_BYTES } from './album-upload.limits'
 
-@ApiTags('album-fotos')
-@Controller('album-fotos')
-export class AlbumFotosController {
-  constructor(private readonly album: AlbumFotosService) {}
+@ApiTags('album-photos')
+@Controller('album-photos')
+export class AlbumPhotosController {
+  constructor(private readonly album: AlbumPhotosService) {}
 
   @Post('upload')
-  @ApiOperation({ summary: 'Subir foto o video al álbum (público)' })
+  @ApiOperation({ summary: 'Upload photo or video to the album (public)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -21,7 +21,7 @@ export class AlbumFotosController {
       required: ['file'],
       properties: {
         file: { type: 'string', format: 'binary' },
-        token: { type: 'string', description: 'Token de invitación (opcional, para asociar al invitado)' },
+        token: { type: 'string', description: 'Invitation token (optional, links upload to guest)' },
       },
     },
   })
@@ -36,14 +36,14 @@ export class AlbumFotosController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Listar fotos/videos del álbum (para librería virtual)' })
+  @ApiOperation({ summary: 'List album photos and videos' })
   list(@Query('limit') limit?: string) {
     const n = limit ? Number(limit) : 50
     return this.album.list(Number.isFinite(n) ? n : 50)
   }
 
   @Get(':id/file')
-  @ApiOperation({ summary: 'Descargar/ver un archivo del álbum' })
+  @ApiOperation({ summary: 'Download or stream an album file' })
   async file(@Param('id') id: string, @Res() res: Response) {
     await this.album.serveFile(Number(id), res)
   }

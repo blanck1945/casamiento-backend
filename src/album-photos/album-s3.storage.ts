@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { PutObjectCommand, S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { GetObjectCommand } from '@aws-sdk/client-s3'
 
 @Injectable()
 export class AlbumS3Storage {
@@ -40,7 +39,7 @@ export class AlbumS3Storage {
   }
 
   async putObject(key: string, body: Buffer, contentType: string): Promise<void> {
-    if (!this.enabled) throw new Error('ALBUM_S3_BUCKET no configurado')
+    if (!this.enabled) throw new Error('ALBUM_S3_BUCKET is not configured')
     await this.getClient().send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -49,11 +48,11 @@ export class AlbumS3Storage {
         ContentType: contentType,
       }),
     )
-    this.log.log(`subido s3://${this.bucket}/${key}`)
+    this.log.log(`uploaded s3://${this.bucket}/${key}`)
   }
 
   async signedGetUrl(key: string, expiresInSec = 3600): Promise<string> {
-    if (!this.enabled) throw new Error('ALBUM_S3_BUCKET no configurado')
+    if (!this.enabled) throw new Error('ALBUM_S3_BUCKET is not configured')
     return getSignedUrl(
       this.getClient(),
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),

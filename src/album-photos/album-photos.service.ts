@@ -13,7 +13,7 @@ import { extname, resolve } from 'node:path'
 import type { Response } from 'express'
 import type { Express } from 'express'
 import { DbService } from '../db/db.service'
-import { InvitacionesService } from '../invitaciones/invitaciones.service'
+import { InvitationsService } from '../invitations/invitations.service'
 import { AlbumS3Storage } from './album-s3.storage'
 import {
   isAllowedUpload,
@@ -22,10 +22,10 @@ import {
   mediaKindLabel,
 } from './album-upload.limits'
 
-export type AlbumFoto = {
+export type AlbumPhoto = {
   id: number
-  invitacionId: number | null
-  invitacionNombre: string | null
+  invitationId: number | null
+  invitationName: string | null
   originalName: string
   storageKey: string
   mimeType: string
@@ -33,22 +33,19 @@ export type AlbumFoto = {
   createdAt: string
 }
 
-export type AlbumFotoListItem = AlbumFoto & {
+export type AlbumPhotoListItem = AlbumPhoto & {
   url: string | null
 }
 
-/**
- * Guarda fotos/videos subidos por invitados.
- * Con `ALBUM_S3_BUCKET` → S3. Sin bucket → disco local en `.data/album-fotos`.
- */
+/** Guest uploads: S3 when `ALBUM_S3_BUCKET` is set, otherwise local `.data/album-photos`. */
 @Injectable()
-export class AlbumFotosService implements OnModuleInit {
-  private readonly log = new Logger(AlbumFotosService.name)
-  private readonly localDir = resolve(process.cwd(), '.data/album-fotos')
+export class AlbumPhotosService implements OnModuleInit {
+  private readonly log = new Logger(AlbumPhotosService.name)
+  private readonly localDir = resolve(process.cwd(), '.data/album-photos')
 
   constructor(
     private readonly db: DbService,
-    private readonly invitaciones: InvitacionesService,
+    private readonly invitations: InvitationsService,
     private readonly s3: AlbumS3Storage,
   ) {}
 
@@ -57,21 +54,21 @@ export class AlbumFotosService implements OnModuleInit {
     try {
       await this.ensureSchema()
     } catch (err) {
-      this.log.warn(`no pude crear el esquema de album_fotos: ${String(err)}`)
+      this.log.warn(`could not create album_photos schema: ${String(err)}`)
     }
     if (this.s3.enabled) {
-      this.log.log('Almacenamiento de álbum: S3')
+      this.log.log('Album storage: S3')
     } else {
-      this.log.log('Almacenamiento de álbum: disco local (.data/album-fotos)')
+      this.log.log('Album storage: local disk (.data/album-photos)')
     }
   }
 
   async ensureSchema(): Promise<void> {
     await this.db.execute(`
-      CREATE TABLE IF NOT EXISTS album_fotos (
+      CREATE TABLE IF NOT EXISTS album_photos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        invitacion_id INTEGER,
-        invitacion_nombre TEXT,
+        invitation_id INTEGER,
+        invitation_name TEXT,
         original_name TEXT NOT NULL,
         storage_key TEXT NOT NULL,
         mime_type TEXT NOT NULL,
@@ -83,32 +80,32 @@ export class AlbumFotosService implements OnModuleInit {
 
   async upload(file: Express.Multer.File | undefined, token?: string): Promise<{ ok: true; id: number; originalName: string }> {
     if (!file?.buffer?.length) {
-      throw new BadRequestException('archivo es requerido')
+      throw new BadRequestException('file is required')
     }
     const mimeType = (file.mimetype || '').toLowerCase()
     const originalName = file.originalname || ''
 
     if (!isAllowedUpload(mimeType, originalName)) {
       throw new UnsupportedMediaTypeException(
-        'Solo imágenes o videos (JPEG, PNG, WebP, GIF, HEIC, MP4, MOV, WebM)',
+        'Only images or videos are allowed (JPEG, PNG, WebP, GIF, HEIC, MP4, MOV, WebM)',
       )
     }
 
     const maxBytes = maxBytesForMime(mimeType, originalName)
     if (file.size > maxBytes) {
       const kind = mediaKindLabel(mimeType, originalName)
-      throw new PayloadTooLargeException(`El ${kind} supera ${maxMbForMime(mimeType, originalName)} MB`)
+      throw new PayloadTooLargeException(`The ${kind} exceeds ${maxMbForMime(mimeType, originalName)} MB`)
     }
 
-    let invitacionId: number | null = null
-    let invitacionNombre: string | null = null
+    let invitationId: number | null = null
+    let invitationName: string | null = null
     if (token) {
       try {
-        const inv = await this.invitaciones.getByToken(token)
-        invitacionId = inv.id
-        invitacionNombre = inv.nombre
+        const inv = await this.invitations.getByToken(token)
+        invitationId = inv.id
+        invitationName = inv.name
       } catch {
-        // token inválido: guardamos la foto igual, sin asociarla a un invitado.
+        // Invalid token: still store the upload without guest association.
       }
     }
 
@@ -129,31 +126,30 @@ export class AlbumFotosService implements OnModuleInit {
 
     await this.ensureSchema()
     const rs = await this.db.execute(
-      `INSERT INTO album_fotos
-        (invitacion_id, invitacion_nombre, original_name, storage_key, mime_type, size_bytes, created_at)
+      `INSERT INTO album_photos
+        (invitation_id, invitation_name, original_name, storage_key, mime_type, size_bytes, created_at)
        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
        RETURNING id, original_name`,
-      [invitacionId, invitacionNombre, file.originalname || `foto${ext}`, storageKey, mimeType, file.size],
+      [invitationId, invitationName, file.originalname || `photo${ext}`, storageKey, mimeType, file.size],
     )
     const row = rs.rows[0] as { id?: number; original_name?: string } | undefined
-    if (!row?.id) throw new Error('No se pudo registrar la foto')
+    if (!row?.id) throw new Error('Could not save album upload')
 
     return { ok: true, id: Number(row.id), originalName: String(row.original_name ?? file.originalname) }
   }
 
-  /** Listado para la librería virtual (URLs firmadas si están en S3). */
-  async list(limit = 50): Promise<{ items: AlbumFotoListItem[] }> {
+  async list(limit = 50): Promise<{ items: AlbumPhotoListItem[] }> {
     await this.ensureSchema()
     const safeLimit = Math.min(Math.max(limit, 1), 200)
     const rs = await this.db.execute(
-      `SELECT id, invitacion_id, invitacion_nombre, original_name, storage_key, mime_type, size_bytes, created_at
-       FROM album_fotos
+      `SELECT id, invitation_id, invitation_name, original_name, storage_key, mime_type, size_bytes, created_at
+       FROM album_photos
        ORDER BY datetime(created_at) DESC, id DESC
        LIMIT ?`,
       [safeLimit],
     )
 
-    const items: AlbumFotoListItem[] = []
+    const items: AlbumPhotoListItem[] = []
     for (const row of rs.rows as Record<string, unknown>[]) {
       const storageKey = String(row.storage_key ?? '')
       const parsed = this.s3.parseStorageKey(storageKey)
@@ -163,16 +159,16 @@ export class AlbumFotosService implements OnModuleInit {
         try {
           url = await this.s3.signedGetUrl(parsed.key)
         } catch (err) {
-          this.log.warn(`no pude firmar URL para ${parsed.key}: ${String(err)}`)
+          this.log.warn(`could not sign URL for ${parsed.key}: ${String(err)}`)
         }
       } else if (parsed.backend === 'local') {
-        url = `/api/album-fotos/${id}/file`
+        url = `/api/album-photos/${id}/file`
       }
 
       items.push({
         id,
-        invitacionId: row.invitacion_id == null ? null : Number(row.invitacion_id),
-        invitacionNombre: row.invitacion_nombre == null ? null : String(row.invitacion_nombre),
+        invitationId: row.invitation_id == null ? null : Number(row.invitation_id),
+        invitationName: row.invitation_name == null ? null : String(row.invitation_name),
         originalName: String(row.original_name ?? ''),
         storageKey,
         mimeType: String(row.mime_type ?? ''),
@@ -188,11 +184,11 @@ export class AlbumFotosService implements OnModuleInit {
   async serveFile(id: number, res: Response): Promise<void> {
     await this.ensureSchema()
     const rs = await this.db.execute(
-      `SELECT storage_key, mime_type, original_name FROM album_fotos WHERE id = ? LIMIT 1`,
+      `SELECT storage_key, mime_type, original_name FROM album_photos WHERE id = ? LIMIT 1`,
       [id],
     )
     const row = rs.rows[0] as { storage_key?: string; mime_type?: string; original_name?: string } | undefined
-    if (!row?.storage_key) throw new NotFoundException('archivo no encontrado')
+    if (!row?.storage_key) throw new NotFoundException('file not found')
 
     const parsed = this.s3.parseStorageKey(String(row.storage_key))
     const mimeType = String(row.mime_type ?? 'application/octet-stream')
@@ -203,10 +199,10 @@ export class AlbumFotosService implements OnModuleInit {
       return
     }
 
-    if (parsed.backend !== 'local') throw new NotFoundException('archivo no disponible')
+    if (parsed.backend !== 'local') throw new NotFoundException('file not available')
 
     const localPath = resolve(this.localDir, parsed.key)
-    if (!existsSync(localPath)) throw new NotFoundException('archivo no encontrado en disco')
+    if (!existsSync(localPath)) throw new NotFoundException('file not found on disk')
 
     res.setHeader('Content-Type', mimeType)
     res.setHeader('Cache-Control', 'private, max-age=3600')

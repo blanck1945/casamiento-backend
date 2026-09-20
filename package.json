@@ -2,7 +2,7 @@
   "name": "backend-bridge",
   "version": "0.1.0",
   "private": true,
-  "description": "API Nest bridge — casamiento Vanesa y Augusto (invitaciones, RSVP, álbum S3, Turso).",
+  "description": "NestJS backend bridge — wedding invitations, RSVP, S3 album, Turso.",
   "scripts": {
     "build": "nest build",
     "start": "nest start",

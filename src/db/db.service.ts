@@ -12,10 +12,7 @@ function redactDbUrl(url: string): string {
   return url.replace(/authToken=[^&]+/i, 'authToken=***')
 }
 
-/**
- * libSQL: Turso remoto en prod (`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`)
- * o SQLite local en dev (`file:./.data/casamiento.db`).
- */
+/** Turso in prod (`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`) or local SQLite in dev. */
 @Injectable()
 export class DbService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DbService.name)
@@ -30,15 +27,15 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     const tursoUrl = this.config.get<string>('TURSO_DATABASE_URL')?.trim()
     const legacyUrl = this.config.get<string>('DATABASE_URL')?.trim()
-    const url = tursoUrl || legacyUrl || 'file:./.data/casamiento.db'
+    const url = tursoUrl || legacyUrl || 'file:./.data/app.db'
     const authToken = this.config.get<string>('TURSO_AUTH_TOKEN')?.trim()
 
     if (isRemoteLibsqlUrl(url)) {
       if (!authToken) {
-        throw new Error('TURSO_AUTH_TOKEN es requerido cuando TURSO_DATABASE_URL es remoto')
+        throw new Error('TURSO_AUTH_TOKEN is required when TURSO_DATABASE_URL is remote')
       }
       this.client = createClient({ url, authToken })
-      this.logger.log(`Turso listo · ${redactDbUrl(url)}`)
+      this.logger.log(`Turso ready · ${redactDbUrl(url)}`)
       return
     }
 
@@ -47,7 +44,7 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
     mkdirSync(dirname(abs), { recursive: true })
     const fileUrl = process.platform === 'win32' ? `file:///${abs.replace(/\\/g, '/')}` : `file:${abs}`
     this.client = createClient({ url: fileUrl })
-    this.logger.log(`SQLite local · ${abs}`)
+    this.logger.log(`Local SQLite · ${abs}`)
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -56,7 +53,7 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
   }
 
   private requireClient(): Client {
-    if (!this.client) throw new Error('DB no configurada')
+    if (!this.client) throw new Error('Database not configured')
     return this.client
   }
 

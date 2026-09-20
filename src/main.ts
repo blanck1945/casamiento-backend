@@ -16,8 +16,8 @@ async function bootstrap() {
   })
 
   const swagger = new DocumentBuilder()
-    .setTitle('Casamiento Vanesa y Augusto · API')
-    .setDescription('Invitaciones (CRUD + RSVP), álbum de fotos colaborativo y comentarios de /muestra.')
+    .setTitle('Backend Bridge API')
+    .setDescription('Wedding invitation backend: invitations, RSVP, collaborative album, preview comments.')
     .setVersion('0.1.0')
     .build()
   const document = SwaggerModule.createDocument(app, swagger)
@@ -26,7 +26,7 @@ async function bootstrap() {
   const port = Number(config.get('PORT') || 3400)
   await app.listen(port)
   // eslint-disable-next-line no-console
-  console.log(`casamiento-vanesa-augusto-api escuchando en :${port} · docs /docs · health /health`)
+  console.log(`backend-bridge listening on :${port} · docs /docs · health /health`)
 }
 
 void bootstrap()

@@ -1,0 +1,32 @@
+---
+description: Backend Bridge — all code, files, and API surface in English
+alwaysApply: true
+---
+
+# English only (backend-bridge)
+
+This repository is **English-only**. Apply to every change in this project.
+
+## Required
+
+- **File and folder names** in English (`invitations/`, not `invitaciones/`)
+- **Code identifiers**: classes, functions, variables, types, enums
+- **API routes and JSON fields** in English (`/api/invitations`, `name`, `status`)
+- **Comments, logs, Swagger text, and error messages** in English
+- **Env var names** in English (`DEMO_DASHBOARD_NAME`, not `NOMBRE`)
+- **Database tables and columns** in English (`invitations`, `allows_plus_one`)
+
+## Allowed exceptions
+
+- **Guest-facing copy** returned only if explicitly required by a product spec (prefer English in this API)
+- **Proper nouns** in seed/demo data (e.g. guest names in examples)
+- **External bucket names** or third-party URLs already provisioned (`casamiento-vanesa-augusto-album`)
+
+## Do not
+
+- Add Spanish (or mixed) module names, routes, or DTO fields
+- Reintroduce legacy Spanish paths (`/api/invitaciones`, `/api/album-fotos`, etc.)
+
+## RSVP status values
+
+Use: `pending` | `yes` | `no` | `unsure` (not `si`, `no`, `aun_no_lo_se`).

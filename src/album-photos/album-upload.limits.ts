@@ -2,7 +2,7 @@ import { extname } from 'node:path'
 
 export const MAX_PHOTO_BYTES = 25 * 1024 * 1024
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024
-/** Límite de Multer: el mayor de ambos tipos. */
+/** Multer limit: max of photo and video caps. */
 export const MAX_UPLOAD_BYTES = Math.max(MAX_PHOTO_BYTES, MAX_VIDEO_BYTES)
 
 export const ALLOWED_PHOTO_MIME = new Set([
@@ -48,8 +48,8 @@ export function maxMbForMime(mimeType: string, originalName = ''): number {
   return Math.round(maxBytesForMime(mimeType, originalName) / (1024 * 1024))
 }
 
-export function mediaKindLabel(mimeType: string, originalName = ''): 'video' | 'foto' {
-  return isVideoMime(mimeType, originalName) ? 'video' : 'foto'
+export function mediaKindLabel(mimeType: string, originalName = ''): 'video' | 'photo' {
+  return isVideoMime(mimeType, originalName) ? 'video' : 'photo'
 }
 
 export function isAllowedUpload(mimeType: string, originalName = ''): boolean {

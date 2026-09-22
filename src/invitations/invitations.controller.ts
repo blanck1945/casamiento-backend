@@ -102,6 +102,12 @@ export class InvitationsController {
     return this.invitations.list()
   }
 
+  @Get('public-link-base')
+  @ApiOperation({ summary: 'Public site origin for invitation links (copy / share)' })
+  getPublicLinkBase() {
+    return { publicBaseUrl: this.comms.getPublicBaseUrl() }
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create invitation with unique token' })
   create(@Body() body: CreateInvitationDto) {

@@ -17,7 +17,7 @@ import { memoryStorage } from 'multer'
 import { CommsService } from '../comms/comms.service'
 import { InvitationsService, type GuestSide, type InvitationStatus } from './invitations.service'
 
-const MAX_CSV_BYTES = 512 * 1024
+const MAX_IMPORT_BYTES = 2 * 1024 * 1024
 
 class CreateInvitationDto {
   @ApiProperty({ example: 'Jane Doe' })
@@ -115,7 +115,7 @@ export class InvitationsController {
   }
 
   @Post('bulk/preview')
-  @ApiOperation({ summary: 'Preview CSV import — detect existing guests by name' })
+  @ApiOperation({ summary: 'Preview CSV/XLSX import — detect existing guests by name' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -129,14 +129,17 @@ export class InvitationsController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: MAX_CSV_BYTES },
+      limits: { fileSize: MAX_IMPORT_BYTES },
     }),
   )
   bulkPreview(@UploadedFile() file: Express.Multer.File) {
     if (!file?.buffer?.length) {
-      throw new BadRequestException('CSV file is required')
+      throw new BadRequestException('CSV or XLSX file is required')
     }
-    return this.invitations.previewCsvImport(file.buffer)
+    return this.invitations.previewCsvImport(file.buffer, {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+    })
   }
 
   @Post('bulk/confirm')
@@ -149,28 +152,35 @@ export class InvitationsController {
   }
 
   @Post('bulk')
-  @ApiOperation({ summary: 'Bulk import invitations from CSV (skips existing names)' })
+  @ApiOperation({ summary: 'Bulk import invitations from CSV/XLSX (skips existing names)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       required: ['file'],
       properties: {
-        file: { type: 'string', format: 'binary', description: 'CSV with columns nombre,email,lado,invita' },
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'CSV or XLSX with columns nombre,email,lado,invita',
+        },
       },
     },
   })
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: MAX_CSV_BYTES },
+      limits: { fileSize: MAX_IMPORT_BYTES },
     }),
   )
   bulkImport(@UploadedFile() file: Express.Multer.File) {
     if (!file?.buffer?.length) {
-      throw new BadRequestException('CSV file is required')
+      throw new BadRequestException('CSV or XLSX file is required')
     }
-    return this.invitations.importFromCsv(file.buffer)
+    return this.invitations.importFromCsv(file.buffer, {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+    })
   }
 
   @Post('send-email/pending')

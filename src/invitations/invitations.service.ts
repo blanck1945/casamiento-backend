@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common'
 import { randomBytes } from 'node:crypto'
-import { parse } from 'csv-parse/sync'
 import { DbService } from '../db/db.service'
 import { nameToInvitationSlug } from './invitation-slug'
+import { type ImportFileMeta, recordsFromImportFile } from './invitation-import-file'
 
 export type InvitationStatus = 'pending' | 'yes' | 'no' | 'unsure'
 export type GuestSide = 'vanesa' | 'augusto'
@@ -270,25 +270,11 @@ export class InvitationsService implements OnModuleInit {
     }
   }
 
-  parseCsvBuffer(buffer: Buffer): { validRows: BulkImportPreviewRow[]; errors: BulkImportError[] } {
-    let text = buffer.toString('utf8')
-    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
-
-    let records: Record<string, string>[]
-    try {
-      records = parse(text, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-        relax_column_count: true,
-      }) as Record<string, string>[]
-    } catch {
-      throw new BadRequestException('invalid CSV format')
-    }
-
-    if (records.length === 0) {
-      throw new BadRequestException('CSV has no data rows')
-    }
+  parseImportBuffer(
+    buffer: Buffer,
+    meta?: ImportFileMeta,
+  ): { validRows: BulkImportPreviewRow[]; errors: BulkImportError[] } {
+    const records = recordsFromImportFile(buffer, meta)
 
     const validRows: BulkImportPreviewRow[] = []
     const errors: BulkImportError[] = []
@@ -334,8 +320,8 @@ export class InvitationsService implements OnModuleInit {
     return { validRows, errors }
   }
 
-  async previewCsvImport(buffer: Buffer): Promise<BulkImportPreviewResult> {
-    const { validRows, errors } = this.parseCsvBuffer(buffer)
+  async previewCsvImport(buffer: Buffer, meta?: ImportFileMeta): Promise<BulkImportPreviewResult> {
+    const { validRows, errors } = this.parseImportBuffer(buffer, meta)
     const existing = await this.list()
     const byName = new Map<string, Invitation>()
     for (const inv of existing) {
@@ -370,8 +356,8 @@ export class InvitationsService implements OnModuleInit {
     }
   }
 
-  async importFromCsv(buffer: Buffer): Promise<BulkImportResult> {
-    const preview = await this.previewCsvImport(buffer)
+  async importFromCsv(buffer: Buffer, meta?: ImportFileMeta): Promise<BulkImportResult> {
+    const preview = await this.previewCsvImport(buffer, meta)
     return this.bulkCreateRows(preview.nuevos)
   }
 

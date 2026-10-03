@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from
 import { randomBytes } from 'node:crypto'
 import { parse } from 'csv-parse/sync'
 import { DbService } from '../db/db.service'
+import { nameToInvitationSlug } from './invitation-slug'
 
 export type InvitationStatus = 'pending' | 'yes' | 'no' | 'unsure'
 export type GuestSide = 'vanesa' | 'augusto'
@@ -10,6 +11,7 @@ export type Invitation = {
   id: number
   name: string
   token: string
+  slug: string
   status: InvitationStatus
   guestSide: GuestSide | null
   allowsPlusOne: boolean
@@ -69,6 +71,7 @@ type Row = {
   id: number
   name: string
   token: string
+  slug: string | null
   status: string
   guest_side: string | null
   allows_plus_one: number
@@ -102,6 +105,7 @@ function toInvitation(row: Row): Invitation {
     id: Number(row.id),
     name: String(row.name),
     token: String(row.token),
+    slug: String(row.slug ?? nameToInvitationSlug(String(row.name))),
     status: row.status as InvitationStatus,
     guestSide: parseGuestSide(row.guest_side),
     allowsPlusOne: Number(row.allows_plus_one) === 1,
@@ -118,7 +122,7 @@ function toInvitation(row: Row): Invitation {
   }
 }
 
-const SELECT_COLUMNS = `id, name, token, status, guest_side, allows_plus_one, plus_one_name,
+const SELECT_COLUMNS = `id, name, token, slug, status, guest_side, allows_plus_one, plus_one_name,
        has_dietary_restrictions, dietary_restrictions, email, email_sent_at,
        responded_at, created_at, updated_at, deleted_at`
 
@@ -171,6 +175,42 @@ export class InvitationsService implements OnModuleInit {
     await this.db.ensureColumn('invitations', 'guest_side', 'TEXT')
     await this.db.ensureColumn('invitations', 'email', 'TEXT')
     await this.db.ensureColumn('invitations', 'email_sent_at', 'TEXT')
+    await this.db.ensureColumn('invitations', 'slug', 'TEXT')
+    await this.db.execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS invitations_slug_unique ON invitations(slug) WHERE slug IS NOT NULL AND deleted_at IS NULL`,
+    )
+    await this.backfillSlugs()
+  }
+
+  private async slugInUse(slug: string, excludeId?: number): Promise<boolean> {
+    const rs = await this.db.execute(
+      `SELECT 1 FROM invitations WHERE slug = ? AND deleted_at IS NULL${excludeId != null ? ' AND id != ?' : ''} LIMIT 1`,
+      excludeId != null ? [slug, excludeId] : [slug],
+    )
+    return rs.rows.length > 0
+  }
+
+  private async allocateSlug(name: string, excludeId?: number): Promise<string> {
+    const base = nameToInvitationSlug(name)
+    let candidate = base
+    let suffix = 2
+    while (await this.slugInUse(candidate, excludeId)) {
+      candidate = `${base}-${suffix}`
+      suffix += 1
+    }
+    return candidate
+  }
+
+  private async backfillSlugs(): Promise<void> {
+    const rs = await this.db.execute(
+      `SELECT id, name, slug FROM invitations WHERE deleted_at IS NULL AND (slug IS NULL OR TRIM(slug) = '')`,
+    )
+    for (const raw of rs.rows as { id?: number; name?: string }[]) {
+      const id = Number(raw.id)
+      const name = String(raw.name ?? '')
+      const slug = await this.allocateSlug(name)
+      await this.db.execute(`UPDATE invitations SET slug = ?, updated_at = datetime('now') WHERE id = ?`, [slug, id])
+    }
   }
 
   async list(): Promise<Invitation[]> {
@@ -197,11 +237,12 @@ export class InvitationsService implements OnModuleInit {
     }
     const emailValue = email == null || email === '' ? null : normalizeEmail(email)
     const token = randomBytes(16).toString('hex')
+    const slug = await this.allocateSlug(value)
     const rs = await this.db.execute(
-      `INSERT INTO invitations (name, token, status, guest_side, allows_plus_one, email, created_at, updated_at)
-       VALUES (?, ?, 'pending', ?, ?, ?, datetime('now'), datetime('now'))
+      `INSERT INTO invitations (name, token, slug, status, guest_side, allows_plus_one, email, created_at, updated_at)
+       VALUES (?, ?, ?, 'pending', ?, ?, ?, datetime('now'), datetime('now'))
        RETURNING ${SELECT_COLUMNS}`,
-      [value, token, side, allowsPlusOne ? 1 : 0, emailValue],
+      [value, token, slug, side, allowsPlusOne ? 1 : 0, emailValue],
     )
     return toInvitation(rs.rows[0] as unknown as Row)
   }
@@ -368,9 +409,12 @@ export class InvitationsService implements OnModuleInit {
     const plusOneName = allowsPlusOne ? current.plusOneName : null
     const emailValue =
       email === undefined ? current.email : email == null || email === '' ? null : normalizeEmail(email)
+    const slug =
+      value === current.name ? current.slug : await this.allocateSlug(value, id)
     const rs = await this.db.execute(
       `UPDATE invitations
        SET name = ?,
+           slug = ?,
            guest_side = ?,
            allows_plus_one = ?,
            plus_one_name = ?,
@@ -378,7 +422,7 @@ export class InvitationsService implements OnModuleInit {
            updated_at = datetime('now')
        WHERE id = ? AND deleted_at IS NULL
        RETURNING ${SELECT_COLUMNS}`,
-      [value, side, allowsPlusOne ? 1 : 0, plusOneName, emailValue, id],
+      [value, slug, side, allowsPlusOne ? 1 : 0, plusOneName, emailValue, id],
     )
     return toInvitation(rs.rows[0] as unknown as Row)
   }
@@ -411,20 +455,47 @@ export class InvitationsService implements OnModuleInit {
     return rs.rows.map((r) => toInvitation(r as unknown as Row))
   }
 
-  async getByToken(token: string): Promise<Invitation> {
+  /** Resolve by URL slug (`/i/maria-lopez`) or legacy hex token. */
+  async getByPublicKey(publicKey: string): Promise<Invitation> {
+    const key = decodeURIComponent(publicKey).trim()
+    if (!key) throw new NotFoundException('Invitation not found')
     const rs = await this.db.execute(
       `SELECT ${SELECT_COLUMNS}
        FROM invitations
-       WHERE token = ? AND deleted_at IS NULL`,
-      [token.trim()],
+       WHERE deleted_at IS NULL AND (slug = ? OR token = ?)
+       LIMIT 1`,
+      [key, key],
     )
     const row = rs.rows[0]
     if (!row) throw new NotFoundException('Invitation not found')
     return toInvitation(row as unknown as Row)
   }
 
-  async rsvp(token: string, input: RsvpInput): Promise<Invitation> {
-    const current = await this.getByToken(token)
+  async getByToken(token: string): Promise<Invitation> {
+    return this.getByPublicKey(token)
+  }
+
+  async resetRsvp(id: number): Promise<Invitation> {
+    await this.getById(id)
+    const rs = await this.db.execute(
+      `UPDATE invitations
+       SET status = 'pending',
+           plus_one_name = NULL,
+           has_dietary_restrictions = NULL,
+           dietary_restrictions = NULL,
+           responded_at = NULL,
+           updated_at = datetime('now')
+       WHERE id = ? AND deleted_at IS NULL
+       RETURNING ${SELECT_COLUMNS}`,
+      [id],
+    )
+    const row = rs.rows[0]
+    if (!row) throw new NotFoundException('Invitation not found')
+    return toInvitation(row as unknown as Row)
+  }
+
+  async rsvp(publicKey: string, input: RsvpInput): Promise<Invitation> {
+    const current = await this.getByPublicKey(publicKey)
     const status = input.status
     if (!['yes', 'no', 'unsure'].includes(status)) {
       throw new BadRequestException('invalid status')
@@ -454,9 +525,9 @@ export class InvitationsService implements OnModuleInit {
            dietary_restrictions = ?,
            responded_at = datetime('now'),
            updated_at = datetime('now')
-       WHERE token = ? AND deleted_at IS NULL
+       WHERE id = ? AND deleted_at IS NULL
        RETURNING ${SELECT_COLUMNS}`,
-      [status, plusOneName, hasDietaryRestrictions, dietaryRestrictions, token.trim()],
+      [status, plusOneName, hasDietaryRestrictions, dietaryRestrictions, current.id],
     )
     return toInvitation(rs.rows[0] as unknown as Row)
   }

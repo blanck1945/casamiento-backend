@@ -26,9 +26,10 @@ export class CommsService {
     return raw || DEFAULT_FROM_ADDRESS
   }
 
-  buildPublicLink(token: string): string {
+  buildPublicLink(slug: string): string {
     const base = this.getPublicBaseUrl().replace(/\/+$/, '')
-    return `${base}/i/${token}`
+    const segment = encodeURIComponent(slug.trim())
+    return `${base}/i/${segment}`
   }
 
   isConfigured(): boolean {

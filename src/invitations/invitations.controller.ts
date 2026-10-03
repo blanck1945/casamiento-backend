@@ -183,7 +183,7 @@ export class InvitationsController {
     for (const inv of pending) {
       if (!inv.email) continue
       try {
-        const link = this.comms.buildPublicLink(inv.token)
+        const link = this.comms.buildPublicLink(inv.slug)
         await this.comms.sendInvitationEmail({ to: inv.email, guestName: inv.name, link })
         await this.invitations.markEmailSent(inv.id)
         sent.push({ id: inv.id, email: inv.email })
@@ -217,6 +217,12 @@ export class InvitationsController {
     })
   }
 
+  @Post(':id/reset-rsvp')
+  @ApiOperation({ summary: 'Clear RSVP for a guest (dashboard) — back to pending' })
+  resetRsvp(@Param('id') id: string) {
+    return this.invitations.resetRsvp(Number(id))
+  }
+
   @Post(':id/send-email')
   @ApiOperation({ summary: 'Send invitation email to a guest' })
   async sendEmail(@Param('id') id: string) {
@@ -224,7 +230,7 @@ export class InvitationsController {
     if (!inv.email) {
       throw new BadRequestException('invitation has no email address')
     }
-    const link = this.comms.buildPublicLink(inv.token)
+    const link = this.comms.buildPublicLink(inv.slug)
     await this.comms.sendInvitationEmail({ to: inv.email, guestName: inv.name, link })
     return this.invitations.markEmailSent(inv.id)
   }

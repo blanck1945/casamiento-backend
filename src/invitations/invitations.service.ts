@@ -218,7 +218,7 @@ export class InvitationsService implements OnModuleInit {
       `SELECT ${SELECT_COLUMNS}
        FROM invitations
        WHERE deleted_at IS NULL
-       ORDER BY created_at DESC, id DESC`,
+       ORDER BY lower(name) ASC, id ASC`,
     )
     return rs.rows.map((r) => toInvitation(r as unknown as Row))
   }

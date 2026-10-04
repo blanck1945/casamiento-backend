@@ -30,6 +30,7 @@ export class UsersService implements OnModuleInit {
     if (!this.db.configured) return
     await this.ensureSchema()
     await this.seedDemoUser()
+    await this.seedNamedDashboardAdmins()
   }
 
   async ensureSchema(): Promise<void> {
@@ -53,6 +54,31 @@ export class UsersService implements OnModuleInit {
 
     if (customEmail && customEmail !== 'panel@casamiento.local') {
       await this.ensureAdminUser(customEmail, password, name)
+    }
+  }
+
+  /** Admins reales: contraseñas solo por env (Railway), nunca en el repo. */
+  private async seedNamedDashboardAdmins(): Promise<void> {
+    const admins = [
+      {
+        email: 'aspastra990@gmail.com',
+        name: 'Augusto',
+        passwordEnv: 'DASHBOARD_ADMIN_AUGUSTO_PASSWORD',
+      },
+      {
+        email: 'vanesanspano@gmail.com',
+        name: 'Vanesa',
+        passwordEnv: 'DASHBOARD_ADMIN_VANESA_PASSWORD',
+      },
+    ] as const
+
+    for (const admin of admins) {
+      const password = this.config.get<string>(admin.passwordEnv)?.trim()
+      if (!password) {
+        this.log.warn(`Admin ${admin.email} omitido: falta ${admin.passwordEnv}`)
+        continue
+      }
+      await this.ensureAdminUser(admin.email, password, admin.name)
     }
   }
 

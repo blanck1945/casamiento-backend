@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common'
 import { randomBytes } from 'node:crypto'
+import { nowArgentinaDateTime } from '../common/argentina-datetime'
 import { DbService } from '../db/db.service'
 import { nameToInvitationSlug } from './invitation-slug'
 import { type ImportFileMeta, recordsFromImportFile } from './invitation-import-file'
@@ -209,7 +210,8 @@ export class InvitationsService implements OnModuleInit {
       const id = Number(raw.id)
       const name = String(raw.name ?? '')
       const slug = await this.allocateSlug(name)
-      await this.db.execute(`UPDATE invitations SET slug = ?, updated_at = datetime('now') WHERE id = ?`, [slug, id])
+      const now = nowArgentinaDateTime()
+      await this.db.execute(`UPDATE invitations SET slug = ?, updated_at = ? WHERE id = ?`, [slug, now, id])
     }
   }
 
@@ -238,11 +240,12 @@ export class InvitationsService implements OnModuleInit {
     const emailValue = email == null || email === '' ? null : normalizeEmail(email)
     const token = randomBytes(16).toString('hex')
     const slug = await this.allocateSlug(value)
+    const now = nowArgentinaDateTime()
     const rs = await this.db.execute(
       `INSERT INTO invitations (name, token, slug, status, guest_side, allows_plus_one, email, created_at, updated_at)
-       VALUES (?, ?, ?, 'pending', ?, ?, ?, datetime('now'), datetime('now'))
+       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?)
        RETURNING ${SELECT_COLUMNS}`,
-      [value, token, slug, side, allowsPlusOne ? 1 : 0, emailValue],
+      [value, token, slug, side, allowsPlusOne ? 1 : 0, emailValue, now, now],
     )
     return toInvitation(rs.rows[0] as unknown as Row)
   }
@@ -397,6 +400,7 @@ export class InvitationsService implements OnModuleInit {
       email === undefined ? current.email : email == null || email === '' ? null : normalizeEmail(email)
     const slug =
       value === current.name ? current.slug : await this.allocateSlug(value, id)
+    const now = nowArgentinaDateTime()
     const rs = await this.db.execute(
       `UPDATE invitations
        SET name = ?,
@@ -405,21 +409,22 @@ export class InvitationsService implements OnModuleInit {
            allows_plus_one = ?,
            plus_one_name = ?,
            email = ?,
-           updated_at = datetime('now')
+           updated_at = ?
        WHERE id = ? AND deleted_at IS NULL
        RETURNING ${SELECT_COLUMNS}`,
-      [value, slug, side, allowsPlusOne ? 1 : 0, plusOneName, emailValue, id],
+      [value, slug, side, allowsPlusOne ? 1 : 0, plusOneName, emailValue, now, id],
     )
     return toInvitation(rs.rows[0] as unknown as Row)
   }
 
   async markEmailSent(id: number): Promise<Invitation> {
+    const now = nowArgentinaDateTime()
     const rs = await this.db.execute(
       `UPDATE invitations
-       SET email_sent_at = datetime('now'), updated_at = datetime('now')
+       SET email_sent_at = ?, updated_at = ?
        WHERE id = ? AND deleted_at IS NULL
        RETURNING ${SELECT_COLUMNS}`,
-      [id],
+      [now, now, id],
     )
     const row = rs.rows[0]
     if (!row) throw new NotFoundException('Invitation not found')
@@ -463,6 +468,7 @@ export class InvitationsService implements OnModuleInit {
 
   async resetRsvp(id: number): Promise<Invitation> {
     await this.getById(id)
+    const now = nowArgentinaDateTime()
     const rs = await this.db.execute(
       `UPDATE invitations
        SET status = 'pending',
@@ -470,10 +476,10 @@ export class InvitationsService implements OnModuleInit {
            has_dietary_restrictions = NULL,
            dietary_restrictions = NULL,
            responded_at = NULL,
-           updated_at = datetime('now')
+           updated_at = ?
        WHERE id = ? AND deleted_at IS NULL
        RETURNING ${SELECT_COLUMNS}`,
-      [id],
+      [now, id],
     )
     const row = rs.rows[0]
     if (!row) throw new NotFoundException('Invitation not found')
@@ -503,25 +509,27 @@ export class InvitationsService implements OnModuleInit {
       dietaryRestrictions = detail || null
     }
 
+    const now = nowArgentinaDateTime()
     const rs = await this.db.execute(
       `UPDATE invitations
        SET status = ?,
            plus_one_name = ?,
            has_dietary_restrictions = ?,
            dietary_restrictions = ?,
-           responded_at = datetime('now'),
-           updated_at = datetime('now')
+           responded_at = ?,
+           updated_at = ?
        WHERE id = ? AND deleted_at IS NULL
        RETURNING ${SELECT_COLUMNS}`,
-      [status, plusOneName, hasDietaryRestrictions, dietaryRestrictions, current.id],
+      [status, plusOneName, hasDietaryRestrictions, dietaryRestrictions, now, now, current.id],
     )
     return toInvitation(rs.rows[0] as unknown as Row)
   }
 
   async softDelete(id: number): Promise<{ ok: true }> {
+    const now = nowArgentinaDateTime()
     await this.db.execute(
-      `UPDATE invitations SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
-      [id],
+      `UPDATE invitations SET deleted_at = ?, updated_at = ? WHERE id = ?`,
+      [now, now, id],
     )
     return { ok: true }
   }

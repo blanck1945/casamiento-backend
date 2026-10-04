@@ -28,7 +28,7 @@ class CreateInvitationDto {
 
   @ApiPropertyOptional({
     example: 'vanesa',
-    enum: ['vanesa', 'augusto'],
+    enum: ['vanesa', 'augusto', 'patricia'],
     description: 'Which side of the couple invited this guest',
   })
   guestSide?: GuestSide
@@ -46,7 +46,7 @@ class UpdateInvitationDto {
 
   @ApiPropertyOptional({
     example: 'vanesa',
-    enum: ['vanesa', 'augusto'],
+    enum: ['vanesa', 'augusto', 'patricia'],
     description: 'Which side of the couple invited this guest',
   })
   guestSide?: GuestSide
@@ -62,7 +62,7 @@ class BulkImportRowDto {
   @ApiPropertyOptional({ example: 'maria@example.com' })
   email?: string | null
 
-  @ApiProperty({ example: 'vanesa', enum: ['vanesa', 'augusto'] })
+  @ApiProperty({ example: 'vanesa', enum: ['vanesa', 'augusto', 'patricia'] })
   guestSide!: GuestSide
 
   @ApiProperty({ example: false })

@@ -6,7 +6,7 @@ import { nameToInvitationSlug } from './invitation-slug'
 import { type ImportFileMeta, recordsFromImportFile } from './invitation-import-file'
 
 export type InvitationStatus = 'pending' | 'yes' | 'no' | 'unsure'
-export type GuestSide = 'vanesa' | 'augusto'
+export type GuestSide = 'vanesa' | 'augusto' | 'patricia'
 
 export type Invitation = {
   id: number
@@ -88,7 +88,10 @@ type Row = {
 }
 
 function parseGuestSide(value: string | null | undefined): GuestSide | null {
-  if (value === 'vanesa' || value === 'augusto') return value
+  const v = (value ?? '').trim().toLowerCase()
+  if (v === 'vanesa' || v === 'novia') return 'vanesa'
+  if (v === 'augusto' || v === 'novio') return 'augusto'
+  if (v === 'patricia') return 'patricia'
   return null
 }
 
@@ -147,6 +150,20 @@ function normalizeGuestName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+/** Invitados PATA / lado Patricia (migración idempotente). */
+const PATRICIA_SIDE_NAME_KEYS = new Set(
+  [
+    'Florencia De Gamas',
+    'Silvia',
+    'Dora Marcovich',
+    'Isabel Larcade',
+    'Mateo Larcade',
+    'Graciela Dozo',
+    'María',
+    'Laura Sende',
+  ].map(normalizeGuestName),
+)
+
 @Injectable()
 export class InvitationsService implements OnModuleInit {
   constructor(private readonly db: DbService) {}
@@ -154,6 +171,25 @@ export class InvitationsService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     if (!this.db.configured) return
     await this.ensureSchema()
+    await this.applyPatriciaSideGuests()
+  }
+
+  /** Asigna guest_side patricia a invitados PATA definidos en el proyecto. */
+  async applyPatriciaSideGuests(): Promise<void> {
+    const rs = await this.db.execute(
+      `SELECT id, name, guest_side FROM invitations WHERE deleted_at IS NULL`,
+    )
+    const now = nowArgentinaDateTime()
+    for (const raw of rs.rows as { id?: number; name?: string; guest_side?: string | null }[]) {
+      const id = Number(raw.id)
+      const key = normalizeGuestName(String(raw.name ?? ''))
+      if (!PATRICIA_SIDE_NAME_KEYS.has(key)) continue
+      if (raw.guest_side === 'patricia') continue
+      await this.db.execute(
+        `UPDATE invitations SET guest_side = 'patricia', updated_at = ? WHERE id = ?`,
+        [now, id],
+      )
+    }
   }
 
   async ensureSchema(): Promise<void> {
@@ -235,7 +271,7 @@ export class InvitationsService implements OnModuleInit {
     if (!value) throw new BadRequestException('name is required')
     const side = guestSide == null ? null : parseGuestSide(guestSide)
     if (guestSide != null && side == null) {
-      throw new BadRequestException('guestSide must be vanesa or augusto')
+      throw new BadRequestException('guestSide must be vanesa, augusto or patricia')
     }
     const emailValue = email == null || email === '' ? null : normalizeEmail(email)
     const token = randomBytes(16).toString('hex')
@@ -297,7 +333,7 @@ export class InvitationsService implements OnModuleInit {
 
       const guestSide = parseGuestSide(ladoRaw.toLowerCase())
       if (!guestSide) {
-        errors.push({ row: rowNum, message: 'lado must be vanesa or augusto' })
+        errors.push({ row: rowNum, message: 'lado must be vanesa, augusto or patricia' })
         continue
       }
 
@@ -393,7 +429,7 @@ export class InvitationsService implements OnModuleInit {
     if (!value) throw new BadRequestException('name is required')
     const side = guestSide == null ? null : parseGuestSide(guestSide)
     if (guestSide != null && side == null) {
-      throw new BadRequestException('guestSide must be vanesa or augusto')
+      throw new BadRequestException('guestSide must be vanesa, augusto or patricia')
     }
     const plusOneName = allowsPlusOne ? current.plusOneName : null
     const emailValue =

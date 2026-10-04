@@ -3,6 +3,21 @@ import { ConfigService } from '@nestjs/config'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { AppModule } from './app.module'
 
+/** Orígenes del front en prod/dev; se unen a CORS_ORIGINS (Railway). */
+const CASAMIENTO_CORS_ORIGINS = [
+  'https://casamientovanesayaugusto.com',
+  'https://www.casamientovanesayaugusto.com',
+  'https://casamiento-vanesa-augusto.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174',
+] as const
+
+function resolveCorsOrigins(corsRaw: string): boolean | string[] {
+  if (corsRaw === '*') return true
+  const fromEnv = corsRaw.split(',').map((s) => s.trim()).filter(Boolean)
+  return [...new Set([...CASAMIENTO_CORS_ORIGINS, ...fromEnv])]
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
   const config = app.get(ConfigService)
@@ -11,7 +26,7 @@ async function bootstrap() {
 
   const corsRaw = config.get<string>('CORS_ORIGINS', '*')
   app.enableCors({
-    origin: corsRaw === '*' ? true : corsRaw.split(',').map((s) => s.trim()),
+    origin: resolveCorsOrigins(corsRaw),
     credentials: corsRaw !== '*',
   })
 

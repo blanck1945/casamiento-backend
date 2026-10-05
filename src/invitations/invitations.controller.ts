@@ -35,6 +35,9 @@ class CreateInvitationDto {
 
   @ApiPropertyOptional({ example: 'maria@example.com' })
   email?: string | null
+
+  @ApiPropertyOptional({ example: '5491112345678', description: 'WhatsApp / celular (solo dígitos, con código país)' })
+  phone?: string | null
 }
 
 class UpdateInvitationDto {
@@ -53,6 +56,9 @@ class UpdateInvitationDto {
 
   @ApiPropertyOptional({ example: 'maria@example.com' })
   email?: string | null
+
+  @ApiPropertyOptional({ example: '5491112345678' })
+  phone?: string | null
 }
 
 class BulkImportRowDto {
@@ -111,7 +117,7 @@ export class InvitationsController {
   @Post()
   @ApiOperation({ summary: 'Create invitation with unique token' })
   create(@Body() body: CreateInvitationDto) {
-    return this.invitations.create(body.name, !!body.allowsPlusOne, body.guestSide, body.email)
+    return this.invitations.create(body.name, !!body.allowsPlusOne, body.guestSide, body.email, body.phone)
   }
 
   @Post('bulk/preview')
@@ -248,7 +254,14 @@ export class InvitationsController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update invitation details (dashboard)' })
   update(@Param('id') id: string, @Body() body: UpdateInvitationDto) {
-    return this.invitations.update(Number(id), body.name, body.allowsPlusOne, body.guestSide, body.email)
+    return this.invitations.update(
+      Number(id),
+      body.name,
+      body.allowsPlusOne,
+      body.guestSide,
+      body.email,
+      body.phone,
+    )
   }
 
   @Delete(':id')

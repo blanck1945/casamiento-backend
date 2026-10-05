@@ -20,6 +20,7 @@ export type Invitation = {
   hasDietaryRestrictions: boolean | null
   dietaryRestrictions: string | null
   email: string | null
+  phone: string | null
   emailSentAt: string | null
   respondedAt: string | null
   createdAt: string
@@ -80,6 +81,7 @@ type Row = {
   has_dietary_restrictions: number | null
   dietary_restrictions: string | null
   email: string | null
+  phone: string | null
   email_sent_at: string | null
   responded_at: string | null
   created_at: string
@@ -104,6 +106,16 @@ function normalizeEmail(value: string | null | undefined): string | null {
   return trimmed.toLowerCase()
 }
 
+/** Dígitos para wa.me (ej. 54911…). Acepta +, espacios, guiones. */
+function normalizePhone(value: string | null | undefined): string | null {
+  const digits = (value ?? '').replace(/\D/g, '')
+  if (!digits) return null
+  if (digits.length < 10 || digits.length > 15) {
+    throw new BadRequestException('invalid phone number')
+  }
+  return digits
+}
+
 function toInvitation(row: Row): Invitation {
   return {
     id: Number(row.id),
@@ -118,6 +130,7 @@ function toInvitation(row: Row): Invitation {
       row.has_dietary_restrictions == null ? null : Number(row.has_dietary_restrictions) === 1,
     dietaryRestrictions: row.dietary_restrictions ? String(row.dietary_restrictions) : null,
     email: row.email ? String(row.email) : null,
+    phone: row.phone ? String(row.phone) : null,
     emailSentAt: row.email_sent_at ? String(row.email_sent_at) : null,
     respondedAt: row.responded_at ? String(row.responded_at) : null,
     createdAt: String(row.created_at),
@@ -127,7 +140,7 @@ function toInvitation(row: Row): Invitation {
 }
 
 const SELECT_COLUMNS = `id, name, token, slug, status, guest_side, allows_plus_one, plus_one_name,
-       has_dietary_restrictions, dietary_restrictions, email, email_sent_at,
+       has_dietary_restrictions, dietary_restrictions, email, phone, email_sent_at,
        responded_at, created_at, updated_at, deleted_at`
 
 function parseAllowsPlusOne(raw: string | undefined): boolean | null {
@@ -211,6 +224,7 @@ export class InvitationsService implements OnModuleInit {
     await this.db.ensureColumn('invitations', 'dietary_restrictions', 'TEXT')
     await this.db.ensureColumn('invitations', 'guest_side', 'TEXT')
     await this.db.ensureColumn('invitations', 'email', 'TEXT')
+    await this.db.ensureColumn('invitations', 'phone', 'TEXT')
     await this.db.ensureColumn('invitations', 'email_sent_at', 'TEXT')
     await this.db.ensureColumn('invitations', 'slug', 'TEXT')
     await this.db.execute(
@@ -266,6 +280,7 @@ export class InvitationsService implements OnModuleInit {
     allowsPlusOne: boolean,
     guestSide?: GuestSide | null,
     email?: string | null,
+    phone?: string | null,
   ): Promise<Invitation> {
     const value = name.trim()
     if (!value) throw new BadRequestException('name is required')
@@ -274,14 +289,15 @@ export class InvitationsService implements OnModuleInit {
       throw new BadRequestException('guestSide must be vanesa, augusto or patricia')
     }
     const emailValue = email == null || email === '' ? null : normalizeEmail(email)
+    const phoneValue = phone == null || phone === '' ? null : normalizePhone(phone)
     const token = randomBytes(16).toString('hex')
     const slug = await this.allocateSlug(value)
     const now = nowArgentinaDateTime()
     const rs = await this.db.execute(
-      `INSERT INTO invitations (name, token, slug, status, guest_side, allows_plus_one, email, created_at, updated_at)
-       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+      `INSERT INTO invitations (name, token, slug, status, guest_side, allows_plus_one, email, phone, created_at, updated_at)
+       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
        RETURNING ${SELECT_COLUMNS}`,
-      [value, token, slug, side, allowsPlusOne ? 1 : 0, emailValue, now, now],
+      [value, token, slug, side, allowsPlusOne ? 1 : 0, emailValue, phoneValue, now, now],
     )
     return toInvitation(rs.rows[0] as unknown as Row)
   }
@@ -423,6 +439,7 @@ export class InvitationsService implements OnModuleInit {
     allowsPlusOne: boolean,
     guestSide?: GuestSide | null,
     email?: string | null | undefined,
+    phone?: string | null | undefined,
   ): Promise<Invitation> {
     const current = await this.getById(id)
     const value = name.trim()
@@ -434,6 +451,8 @@ export class InvitationsService implements OnModuleInit {
     const plusOneName = allowsPlusOne ? current.plusOneName : null
     const emailValue =
       email === undefined ? current.email : email == null || email === '' ? null : normalizeEmail(email)
+    const phoneValue =
+      phone === undefined ? current.phone : phone == null || phone === '' ? null : normalizePhone(phone)
     const slug =
       value === current.name ? current.slug : await this.allocateSlug(value, id)
     const now = nowArgentinaDateTime()
@@ -445,10 +464,11 @@ export class InvitationsService implements OnModuleInit {
            allows_plus_one = ?,
            plus_one_name = ?,
            email = ?,
+           phone = ?,
            updated_at = ?
        WHERE id = ? AND deleted_at IS NULL
        RETURNING ${SELECT_COLUMNS}`,
-      [value, slug, side, allowsPlusOne ? 1 : 0, plusOneName, emailValue, now, id],
+      [value, slug, side, allowsPlusOne ? 1 : 0, plusOneName, emailValue, phoneValue, now, id],
     )
     return toInvitation(rs.rows[0] as unknown as Row)
   }

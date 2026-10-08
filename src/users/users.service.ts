@@ -30,6 +30,7 @@ export class UsersService implements OnModuleInit {
     if (!this.db.configured) return
     await this.ensureSchema()
     await this.seedDemoUser()
+    await this.migrateLegacyAugustoAdminEmail()
     await this.seedNamedDashboardAdmins()
   }
 
@@ -57,11 +58,29 @@ export class UsersService implements OnModuleInit {
     }
   }
 
+  /** Renombra el admin Augusto si quedó el email viejo en Turso/SQLite local. */
+  private async migrateLegacyAugustoAdminEmail(): Promise<void> {
+    const oldEmail = 'aspastra990@gmail.com'
+    const newEmail = 'aspastrana990@gmail.com'
+    const oldRs = await this.db.execute(`SELECT id FROM admin_users WHERE email = ?`, [oldEmail])
+    if (oldRs.rows.length === 0) return
+
+    const newRs = await this.db.execute(`SELECT id FROM admin_users WHERE email = ?`, [newEmail])
+    if (newRs.rows.length > 0) {
+      await this.db.execute(`DELETE FROM admin_users WHERE email = ?`, [oldEmail])
+      this.log.log(`Legacy admin ${oldEmail} removed (${newEmail} already exists)`)
+      return
+    }
+
+    await this.db.execute(`UPDATE admin_users SET email = ? WHERE email = ?`, [newEmail, oldEmail])
+    this.log.log(`Admin email migrated: ${oldEmail} → ${newEmail}`)
+  }
+
   /** Admins reales: contraseñas solo por env (Railway), nunca en el repo. */
   private async seedNamedDashboardAdmins(): Promise<void> {
     const admins = [
       {
-        email: 'aspastra990@gmail.com',
+        email: 'aspastrana990@gmail.com',
         name: 'Augusto',
         passwordEnv: 'DASHBOARD_ADMIN_AUGUSTO_PASSWORD',
       },
